@@ -113,13 +113,23 @@ function showNextEntry()
     {
         var nextIdx = ( currentEntryIdx + 1 ) % entries.length;
         updateToolstripEntry(nextIdx);
-    }
-    else
-    {
-        goToCalendar();
-    }    
+    }  
 }
 
+function showPrevEntry()
+{
+    if ( loggedIn )
+    {
+        var prevIdx = ( currentEntryIdx - 1 ) % entries.length;
+        updateToolstripEntry(prevIdx);
+    }  
+}
+
+function btnOver() 
+{
+	var c = currentEntry;
+	document.getElementById("currententry").title = c.title + "\nStart: " + c.start + "\nEnd: " + c.end + "\nWhere: " + c.where;
+}
 
 /* API */
 var calendarBasicView ="https://www.google.com/calendar/feeds/default/private/full?futureevents=true&orderby=starttime&sortorder=ascending";
@@ -185,11 +195,20 @@ Date.prototype.setISO8601 = function (string) {
 
 </script>
 </head>
-<body onload="init()" onclick="showNextEntry()">
-  <div class="toolstrip-button">
-    <img src="calendar.png" style="width:auto; height:auto">
-    <span id="notLoggedIn" style="display:none;">Login</span>
-    <span id="loggedIn"><span style="display: inline-block;" id="nextEntry" class="base-flip"></span></span>
-  </div>
+<body onload="init()">
+
+	<div id="prev" class="toolstrip-button" onclick="showPrevEntry()">
+	  <span id="prevtext">&lt;</span>
+	</div>	
+	
+	<div id="currententry" class="toolstrip-button" onclick="goToCalendar()" onmouseover="btnOver()">
+		<img src="calendar.png" style="width:auto; height:auto">
+		<span id="notLoggedIn" style="display:none;">Login</span>
+		<span id="loggedIn"><span style="display: inline-block;" id="nextEntry" class="base-flip"></span></span>
+	</div>    
+	
+	<div id="next" class="toolstrip-button" onclick="showNextEntry()">
+		<span id="nexttext">&gt;</span>
+	</div>	
 </body>
 </html>
