@@ -35,6 +35,11 @@ function toArray(obj) {
 function isAllDayEvent(dateStr) {
   return dateStr.length == allDayEventDateFormat.length;
 }
+
+function isRecurrencyEvent(entry)
+{
+	return entry['gd:recurrence'] != undefined;
+}
  
 function scheduleRequest() {
   window.setTimeout(startRequest, pollInterval);
@@ -72,42 +77,91 @@ function toggleLoginState(flag) {
 function updateEntries(data) {
   entries = [];
   var calData = toArray(data.feed.entry);
+  
+  if ( calData == undefined )
+  {
+	console.log("GoCalendar: NO data fetched. Data: " + data);
+  }
+  
   for ( var i = 0, len = calData.length; i < len; ++i ) {
-    var startDate = new Date();
-    var endDate = new Date();
+	var startTime = undefined;
+	var endTime = undefined;
     var calEntry = calData[i];
-    var startTime = calEntry['gd:when'].startTime;
-    var endTime = calEntry['gd:when'].endTime;
-
-    // All day events come back in YYYY/MM/DD format. Append a default 
-    // timezone so that the dates can be properly resolved.
-    if (isAllDayEvent(startTime))
-      startTime += defaultTZ;
-
-    if (isAllDayEvent(endTime))
-      endTime += defaultTZ;
-
-    startDate.setISO8601(startTime);
-    endDate.setISO8601(endTime);
-
-    var entry = { 
-        title: calEntry.title['#text'],
-        start: startDate,
-        end: endDate,
-        where: calEntry['gd:where'].valueString,
-        id: calEntry.id
-    }
-    entries[i] = entry;
-    console.log(entry);
+	
+	if ( isRecurrencyEvent(calEntry) )
+	{
+		var when = toArray(calEntry['gd:when']);
+		console.log("Recurrency Event: " + calEntry);
+		for ( var j = 0, rlen = when.length; j < rlen; ++j )
+		{
+			startTime = when[j].startTime;
+			endTime = when[j].endTime;
+			
+			addToEntryList(
+				calEntry.title['#text'],
+				startTime,
+				endTime,
+				calEntry['gd:where'].valueString,
+				calEntry.id,
+				j);
+		}
+	}
+	else
+	{	
+		startTime = calEntry['gd:when'].startTime;
+		endTime = calEntry['gd:when'].endTime;
+		
+		addToEntryList(
+			calEntry.title['#text'],
+			startTime,
+			endTime,
+			calEntry['gd:where'].valueString,
+			calEntry.id,
+			0);		
+	}
+	
   }
   console.log(entries.length + " entries found.");
 }
 
+function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
+{	
+    var startDate = new Date();
+    var endDate = new Date();
+	
+    // All day events come back in YYYY/MM/DD format. Append a default 
+    // timezone so that the dates can be properly resolved.
+    if (isAllDayEvent(estart))
+      estart += defaultTZ;
+	
+    if (isAllDayEvent(eend))
+      eend += defaultTZ;
+
+    startDate.setISO8601(estart);
+    endDate.setISO8601(eend);
+
+    var entry = { 
+        title: etitle,
+        start: startDate,
+        end: endDate,
+        where: ewhere,
+        id: eid,
+		recid : erecur
+    }
+	
+	var idx = entries.length;
+    entries[idx] = entry;
+    console.log("idx: " + idx + "entry: " + entry);
+}
+
 function updateToolstripEntry(idx) {
-  if (currentEntry == undefined || currentEntry.id != entries[idx].id) {
-    currentEntry = entries[idx];
-    currentEntryIdx = idx;
-    startFlip();
+  if ( idx >= 0 && idx < entries.length ) // check IDX
+  {
+	  if (currentEntry == undefined || currentEntry.id != entries[idx].id || currentEntry.recid != entries[idx].recid) {
+		currentEntry = entries[idx];
+		currentEntryIdx = idx;
+		startFlip();
+	  }
   }
 }
 
