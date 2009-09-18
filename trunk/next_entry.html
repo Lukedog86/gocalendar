@@ -4,9 +4,13 @@
 <script type="text/javascript" src="jkl-parsexml.js"></script>
 <script type="text/javascript" src="dataFormat.js"></script>
 <script>
+
 var calendar = "http://www.google.com/calendar/render";
 var pollInterval = 1000 * 30;  // 1 minute
 var requestTimeout = 1000 * 5;  // 5 seconds
+var oneDayInMilli = 1000 * 24 * 60 * 60; // 1 day
+var defaultTZ = 'T00:00:00.000-04:00'; // midnight Eastern Daylight Time
+var allDayEventDateFormat = 'YYYY-MM-DD';
 var currentEntry;
 var currentEntryIdx;
 var entries = [];
@@ -18,6 +22,20 @@ function init() {
   console.log("Culture is: " + cultureInfo);    
 }
 
+function $(elem) {
+  return document.getElementById(elem);
+}
+ 
+function toArray(obj) {
+  if ( obj.constructor == Array )
+    return obj;
+  return [obj];
+}
+
+function isAllDayEvent(dateStr) {
+  return dateStr.length == allDayEventDateFormat.length;
+}
+ 
 function scheduleRequest() {
   window.setTimeout(startRequest, pollInterval);
 }
@@ -26,55 +44,63 @@ function scheduleRequest() {
 function startRequest() {  
   getNextEntry(
     function(data) {
-      toggleLoggedInState();
+      toggleLoginState(true);
       updateEntries(data);
       updateToolstripEntry(0);
       scheduleRequest();
     },
     function() {
-      toggleLoggedOutState();
+      toggleLoginState(false);
       scheduleRequest();
     }
   );
 }
 
 // ui stuff
-function toggleLoggedInState() {
-  document.getElementById("notLoggedIn").style.display = "none";
-  document.getElementById("loggedIn").style.display = "";
-  loggedIn = true;
+function toggleLoginState(flag) {
+  if ( flag ) {
+    $("notLoggedIn").style.display = "none";
+    $("loggedIn").style.display = "";
+    loggedIn = true;
+  } else {
+    $("loggedIn").style.display = "none";
+    $("notLoggedIn").style.display = ""; 
+    loggedIn = false;
+  }
 }
 
-function toggleLoggedOutState() {
-  document.getElementById("loggedIn").style.display = "none";
-  document.getElementById("notLoggedIn").style.display = "";
-  loggedIn = false;
-}
+function updateEntries(data) {
+  entries = [];
+  var calData = toArray(data.feed.entry);
+  for ( var i = 0, len = calData.length; i < len; ++i ) {
+    var startDate = new Date();
+    var endDate = new Date();
+    var calEntry = calData[i];
+    var startTime = calEntry['gd:when'].startTime;
+    var endTime = calEntry['gd:when'].endTime;
 
-function updateEntries(data)
-{
-    entries = [];
-    for ( var i = 0; i < data.feed.entry.length; ++i )
-    {
-        var d_start = new Date();
-        var d_end = new Date();
-        d_start.setISO8601(data.feed.entry[i]['gd:when'].startTime);
-        d_end.setISO8601(data.feed.entry[i]['gd:when'].endTime);
-        
-        var entry = 
-        { 
-            title: data.feed.entry[i].title['#text'],
-            start: d_start,
-            end: d_end,
-            where: data.feed.entry[i]['gd:where'].valueString,
-            id: data.feed.entry[i].id
-        }
-        
-        entries[i] = entry;
-        console.log(entry);
+    // All day events come back in YYYY/MM/DD format. Append a default 
+    // timezone so that the dates can be properly resolved.
+    if (isAllDayEvent(startTime))
+      startTime += defaultTZ;
+
+    if (isAllDayEvent(endTime))
+      endTime += defaultTZ;
+
+    startDate.setISO8601(startTime);
+    endDate.setISO8601(endTime);
+
+    var entry = { 
+        title: calEntry.title['#text'],
+        start: startDate,
+        end: endDate,
+        where: calEntry['gd:where'].valueString,
+        id: calEntry.id
     }
-    
-    console.log(entries.length + " entries found.");
+    entries[i] = entry;
+    console.log(entry);
+  }
+  console.log(entries.length + " entries found.");
 }
 
 function updateToolstripEntry(idx) {
@@ -91,55 +117,53 @@ function goToCalendar() {
 
 // animation
 function startFlip() {
-  document.getElementById("nextEntry").className = 'mid-flip';
+  $("nextEntry").className = 'mid-flip';
   setTimeout(midFlip, 500);
 }
 
 function midFlip() {
-  document.getElementById("nextEntry").className = 'post-flip';  
-  document.getElementById("nextEntry").innerHTML = currentEntry.title + " @ " + shortDateString(currentEntry.start);
+  var nextEntryText = currentEntry.title + " @ " + 
+    shortDateString(currentEntry.start, currentEntry.end)
+  $("nextEntry").className = 'post-flip';  
+  $("nextEntry").innerHTML = nextEntryText;
   setTimeout(endFlip, 500);
 }
 
 function endFlip() {
-  document.getElementById("nextEntry").className = 'base-flip';  
+  $("nextEntry").className = 'base-flip';  
 }
 
-function shortDateString(date)
-{
-    //return (date.getDay()+1) + '/' + (date.getMonth()+1) + '/' + date.getFullYear() + ' ' + date.getHours() + ':' + date.getMinutes();
-	if ( cultureInfo == 'it' )
-		return date.format('dd/mm/yy HH:MM');
-	else if ( cultureInfo == 'en-US' )
-		return date.format('m/d/yy h:MM TT');
-	else if ( cultureInfo == 'en-GB' )
-		return date.format('dd/mm/yy HH:MM');
-	else		
-		return date.format('dd/mm/yy HH:MM');	
+function shortDateString(start, end) {
+  var format;
+  switch ( cultureInfo ) {
+    case 'en-US':
+      format = 'm/d/yy h:MM TT';
+      break;
+    default:
+      format = 'dd/mm/yy HH:MM';
+  }
+  // If the event is an all day event, don't show the time.
+  if ( (end - start) == oneDayInMilli )
+    format = format.substring(0, format.indexOf(' '));
+  return start.format(format);
 }
 
-function showNextEntry()
-{
-    if ( loggedIn )
-    {
-        var nextIdx = ( currentEntryIdx + 1 ) % entries.length;
-        updateToolstripEntry(nextIdx);
-    }  
+function showNextEntry() {
+  if ( !loggedIn ) return;
+  var nextIdx = ( currentEntryIdx + 1 ) % entries.length;
+  updateToolstripEntry(nextIdx);
 }
 
-function showPrevEntry()
-{
-    if ( loggedIn )
-    {
-        var prevIdx = ( currentEntryIdx - 1 ) % entries.length;
-        updateToolstripEntry(prevIdx);
-    }  
+function showPrevEntry() {
+  if ( !loggedIn ) return;
+  var prevIdx = ( currentEntryIdx - 1 ) % entries.length;
+  updateToolstripEntry(prevIdx);
 }
 
-function btnOver() 
-{
-	var c = currentEntry;
-	document.getElementById("currententry").title = c.title + "\nStart: " + c.start + "\nEnd: " + c.end + "\nWhere: " + c.where;
+function btnOver() {
+    var c = currentEntry;
+    $("currententry").title = c.title + "\nStart: " + c.start +
+        "\nEnd: " + c.end + "\nWhere: " + c.where;
 }
 
 /* API */
@@ -165,14 +189,10 @@ function getNextEntry(onSuccess, onError) {
     
     try {
         console.log("request..");
- 
         var xml = new JKL.ParseXML(calendarBasicView);
         xml.async( handleSuccess );
         xml.parse();
-
-        
-    }    
-    catch(e) {
+    } catch(e) {
         console.log("ex: " + e);
         console.error("exception: " + e);
         handleError();
@@ -183,18 +203,18 @@ function getNextEntry(onSuccess, onError) {
 </head>
 <body onload="init()">
 
-	<div id="prev" class="toolstrip-button" onclick="showPrevEntry()">
-	  <span id="prevtext">&lt;</span>
-	</div>	
-	
-	<div id="currententry" class="toolstrip-button" onclick="goToCalendar()" onmouseover="btnOver()">
-		<img src="calendar.png" style="width:auto; height:auto">
-		<span id="notLoggedIn" style="display:none;">Login</span>
-		<span id="loggedIn"><span style="display: inline-block;" id="nextEntry" class="base-flip"></span></span>
-	</div>    
-	
-	<div id="next" class="toolstrip-button" onclick="showNextEntry()">
-		<span id="nexttext">&gt;</span>
-	</div>	
+    <div id="prev" class="toolstrip-button" onclick="showPrevEntry()">
+      <span id="prevtext">&lt;</span>
+    </div>    
+    
+    <div id="currententry" class="toolstrip-button" onclick="goToCalendar()" onmouseover="btnOver()">
+        <img src="calendar.png" style="width:auto; height:auto">
+        <span id="notLoggedIn" style="display:none;">Login</span>
+        <span id="loggedIn"><span style="display: inline-block;" id="nextEntry" class="base-flip"></span></span>
+    </div>    
+    
+    <div id="next" class="toolstrip-button" onclick="showNextEntry()">
+        <span id="nexttext">&gt;</span>
+    </div>    
 </body>
 </html>
