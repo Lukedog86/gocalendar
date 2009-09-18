@@ -2,8 +2,8 @@
    "description": "Displays next entry in Google Calendar",
    "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCrP2jsjQkjfo3Dqn3snxw2w3PYozcbk7aDv46P4JbRvTTzdaD50hwnSYVjEfgkRIdMPoiYfd66mQS5fCaSVWWokRpelBXJbUrbF9J+vDGkT+XLq+bZdJfn81+UPd9nVpPybnJlPtdGuXZ1Ns3w8/QH5llQuXe/Lvm0HUz8aeYAowIDAQAB",
    "name": "GoCalendar",
-   "permissions": [ "http://*.google.com/*", "https://*.google.com/*" ],
+   "permissions": [ "http://*.google.com/*", "https://*.google.com/*", "tabs" ],
    "toolstrips": [ "next_entry.html" ],
    "update_url": "http://cioccoblocco.altervista.org/chromium/gocalendar/go_update.xml",   
-   "version": "0.2.0"
+   "version": "0.2.5"
 }
