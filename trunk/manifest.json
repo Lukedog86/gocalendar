@@ -5,5 +5,5 @@
    "permissions": [ "http://*.google.com/*", "https://*.google.com/*", "tabs" ],
    "toolstrips": [ "next_entry.html" ],
    "update_url": "http://cioccoblocco.altervista.org/chromium/gocalendar/go_update.xml",   
-   "version": "0.2.5"
+   "version": "0.2.6"
 }
