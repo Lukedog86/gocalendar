@@ -76,13 +76,15 @@ function toggleLoginState(flag) {
 
 function updateEntries(data) {
   entries = [];
-  var calData = toArray(data.feed.entry);
-  
-  if ( calData == undefined )
+  if ( data.feed.entry == undefined )
   {
-	console.log("GoCalendar: NO data fetched. Data: " + data);
+	console.log('GoCalendar: NO data fetched.');
+    sadFace();
+	return;
   }
   
+  var calData = toArray(data.feed.entry); 
+ 
   for ( var i = 0, len = calData.length; i < len; ++i ) {
 	var startTime = undefined;
 	var endTime = undefined;
@@ -187,6 +189,11 @@ function endFlip() {
   $("nextEntry").className = 'base-flip';  
 }
 
+function sadFace()
+{
+	$("nextEntry").innerHTML = ":("; 
+}
+
 function shortDateString(start, end) {
   var format;
   switch ( cultureInfo ) {
@@ -216,8 +223,11 @@ function showPrevEntry() {
 
 function btnOver() {
     var c = currentEntry;
-    $("currententry").title = c.title + "\nStart: " + c.start +
-        "\nEnd: " + c.end + "\nWhere: " + c.where;
+	if ( c != undefined )
+	{
+		$("currententry").title = c.title + "\nStart: " + c.start +
+			"\nEnd: " + c.end + "\nWhere: " + c.where;
+	}
 }
 
 /* API */
