@@ -1,0 +1,285 @@
+﻿<html>
+<script>
+ 
+function el(id) {
+  try {
+    if (document.getElementById) {
+      return document.getElementById(id);
+    } else if (document.all) {
+      return document.all[id];
+    }
+  } catch (e) {
+  }
+  return null;
+}
+ 
+function GetLoginForm() {
+  try {
+    var f = el('gaia_loginform');
+    if (f) {
+      return f;
+    }
+    if (document.forms && document.forms[0]) {
+      return document.forms[0];
+    }
+  } catch (e) {
+  }
+  return null;
+}
+ 
+function MaybePreloadUser() {
+  try {
+    var f = GetLoginForm();
+    if (f && f['Email'] && f['Email'].value) {
+      new Image().src =
+        '//www.google.com/calendar/preload?uname=' +
+        encodeURIComponent(f['Email'].value) + '&fanout=true';
+    }
+  } catch (e) {
+  }
+}
+
+function gaia_onLoginSubmit() {  
+  send_post_request();
+  if (window.gaiacb_onLoginSubmit) {
+    return gaiacb_onLoginSubmit();
+  } else {
+    return true;
+  } 
+}
+
+function send_post_request()
+{
+    var url = "https://www.google.com/accounts/ServiceLoginAuth?service=cl";
+    var mail = document.getElementById("Email").value;
+    var passwd = document.getElementById("Passwd").value;
+    var cookie = document.getElementById("PersistentCookie").value;
+    var params = "Email="+mail+"&Passwd="+passwd+"&PersistentCookie="+cookie;
+    var http = new XMLHttpRequest();
+    
+    http.open("POST", url, true);
+
+    //Send the proper header information along with the request
+    http.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+    http.setRequestHeader("Content-length", params.length);
+    http.setRequestHeader("Connection", "close");
+
+    http.onreadystatechange = function() {//Call a function when the state changes.
+        if(http.readyState == 4 && http.status == 200) {
+            //alert(http.responseText);
+            var page = chrome.extension.getURL("next_entry.html");
+            chrome.toolstrip.collapse( {url: page} );
+        }
+    }
+    http.send(params);
+}
+
+function gaia_setFocus() {
+  var f = null;
+  if (document.getElementById) { 
+    f = document.getElementById("gaia_loginform");
+  } else if (window.gaia_loginform) { 
+    f = window.gaia_loginform;
+  } 
+  if (f) {
+    if (f.Email && (f.Email.value == null || f.Email.value == "")) {
+      f.Email.focus();
+    } else if (f.Passwd) {
+      f.Passwd.focus();
+    } 
+  }
+}
+</script> 
+
+<td style="padding-left: 10px;" valign=top align=center> 
+<style type="text/css">
+  div.errormsg { color: red; font-size: smaller; font-family:arial,sans-serif; }
+  font.errormsg { color: red; font-size: smaller; font-family:arial,sans-serif; }  
+</style> 
+<style type="text/css">
+.gaia.le.lbl { font-family: Arial, Helvetica, sans-serif; font-size: smaller; }
+.gaia.le.fpwd { font-family: Arial, Helvetica, sans-serif; font-size: 70%; }
+.gaia.le.chusr { font-family: Arial, Helvetica, sans-serif; font-size: 70%; }
+.gaia.le.val { font-family: Arial, Helvetica, sans-serif; font-size: smaller; }
+.gaia.le.button { font-family: Arial, Helvetica, sans-serif; font-size: smaller; }
+.gaia.le.rem { font-family: Arial, Helvetica, sans-serif; font-size: smaller; }
+ 
+.gaia.captchahtml.desc { font-family: arial, sans-serif; font-size: smaller; } 
+.gaia.captchahtml.cmt { font-family: arial, sans-serif; font-size: smaller; font-style: italic; }  
+</style> 
+<form id="gaia_loginform"
+      
+        action="https://www.google.com/accounts/ServiceLoginAuth?service=cl" method="post"
+      
+      onsubmit=
+                 "return(gaia_onLoginSubmit());"
+                > 
+<div id="gaia_loginbox"> 
+<table class="form-noindent" cellspacing="3" cellpadding="5" width="100%" border="0"> 
+  <tr> 
+  <td valign="top" style="text-align:center" nowrap="nowrap"
+        bgcolor="#e8eefa"> 
+  <div class="loginBox"> 
+  <table id="gaia_table" align="center" border="0" cellpadding="1" cellspacing="0"> 
+  <tr> 
+<td colspan="2" align="center"> 
+  <font size="-1"> 
+  Sign in to
+  Google Calendar
+  with your
+  </font> 
+  <table> 
+  <tr> 
+  <td valign="top"> 
+  <img src="https://www.google.com/accounts/google_transparent.gif"
+           alt="Google"/> 
+  </td> 
+  <td valign="middle"> 
+  <font size="+0"><b>Account</b></font> 
+  </td> 
+  </tr> 
+</table> 
+</td> 
+</tr> 
+  <script type="text/javascript"><!--
+    function onPreCreateAccount() {
+    
+      return true;
+    
+    }
+ 
+    function onPreLogin() {
+    
+      
+      if (window["onlogin"] != null) {
+        return onlogin();
+      } else {
+        return true;
+      }
+    
+    }
+  --></script> 
+<tr> 
+  <td colspan="2" align="center"> 
+  </td> 
+</tr> 
+<tr> 
+  <td nowrap="nowrap"> 
+  <div align="right"> 
+  <span class="gaia le lbl"> 
+  Email:
+  </span> 
+  </div> 
+  </td> 
+  <td> 
+  <input type="hidden" name="continue" id="continue"
+           value="http://www.google.com/calendar/render" /> 
+  <input type="hidden" name="followup" id="followup"
+           value="http://www.google.com/calendar/render" /> 
+  <input type="hidden" name="service" id="service"
+           value="cl" /> 
+  <input type="hidden" name="nui" id="nui"
+           value="1" /> 
+  <input type="hidden"
+             name="GALX"
+             value="qTOeKYYyKoU" /> 
+  <input type="text" name="Email"  id="Email"
+  size="18" value=""
+  
+  
+    class='gaia le val'
+  
+  /> 
+  </td> 
+</tr> 
+<tr> 
+  <td></td> 
+  <td align="left"> 
+  </td> 
+</tr> 
+<tr> 
+  <td align="right" nowrap="nowrap"> 
+  <span class="gaia le lbl"> 
+  Password:
+  </span> 
+  </td> 
+  <td> 
+  <input type="password"
+   name="Passwd" id="Passwd"
+  size="18" 
+  
+  
+ 
+  
+    class="gaia le val" 
+  
+  /> 
+  </td> 
+</tr> 
+<tr> 
+  <td> 
+  </td> 
+  <td align="left"> 
+  </td> 
+</tr> 
+  <tr> 
+  <td align="right" valign="top"> 
+  <input type="checkbox" name="PersistentCookie" id="PersistentCookie"
+    value="yes"
+  
+    checked='checked'
+  
+  /> 
+  <input type="hidden" name='rmShown' value="1" /> 
+  </td> 
+  <td> 
+  <label for="PersistentCookie" class="gaia le rem"> 
+  Stay signed in
+  </label> 
+  </td> 
+</tr> 
+<tr> 
+  <td> 
+  </td> 
+  <td align="left"> 
+  <input type="submit" class="gaia le button" name="signIn"
+           value="Sign in"
+                  /> 
+  </td> 
+</tr> 
+  </table> 
+  </div> 
+  </td> 
+  </tr> 
+</table> 
+</div> 
+<input type="hidden" name="asts"
+       id="asts"
+       value=""> 
+</form> 
+<form id="gaia_universallogin"
+      action="https://www.google.com/accounts/ServiceLoginAuth?service=cl" method="post"
+      onsubmit="return(gaia_onLoginSubmit());"> 
+  <input type="hidden" name="continue" id="continue"
+           value="http://www.google.com/calendar/render" /> 
+  <input type="hidden" name="followup" id="followup"
+           value="http://www.google.com/calendar/render" /> 
+  <input type="hidden" name="service" id="service"
+           value="cl" /> 
+  <input type="hidden" name="nui" id="nui"
+           value="1" /> 
+</form> 
+  <script type="text/javascript"> 
+<!--  
+try {
+  console.log("try set focus...");
+  gaia_setFocus();
+  var f = GetLoginForm();
+  if (f && f['Passwd']) {
+    f['Passwd'].onfocus = MaybePreloadUser;
+  }
+} catch (e) {
+}
+-->
+</script>
+</html>
