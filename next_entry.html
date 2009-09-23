@@ -48,7 +48,7 @@ function init()
 {    
   // retrieving culture information ( useful to format datetime)
   cultureInfo = window.clientInformation.language;
-  console.log("Culture is: " + cultureInfo);  
+  go_log("Culture is: " + cultureInfo);  
 
   // setup communication with OptionPage
   chrome.extension.onConnect.addListener( function(port)
@@ -92,6 +92,11 @@ function isRecurrencyEvent(entry)
 
 // helper to launch a new request in the provided interval 
 function scheduleRequest() {
+  if ( polling != undefined )
+  {
+	window.clearTimeout(polling);  
+  }
+  
   polling = window.setTimeout(startRequest, pollInterval);
 }
 
@@ -126,18 +131,22 @@ function fetchOptions()
 
 // callback for onMessage event
 function onMessageFromOptionPage(obj)
-{
-    console.log(obj.message);
+{    
     if (obj.message == "OptionsSaved!")
     {
-        console.log("settings count: " + obj.values.length);
+        go_log("settings count: " + obj.values.length);
         for ( var i = 0; i < obj.values.length; i++ )
         {
             localStorage.setItem(obj.values[i].name, obj.values[i].value);
         }
         
         fetchOptions();
-        window.clearTimeout(polling);
+		
+		if ( polling != undefined )
+		{
+			window.clearTimeout(polling);
+		}
+			
         startRequest();
     }
     else if (obj.message == "WantOptions!")
@@ -161,8 +170,10 @@ function startRequest() {
   getNextEntry(
     function(data) {
       toggleLoginState(true);
-      updateEntries(data);
-      updateToolstripEntry(0);
+      if ( updateEntries(data) == true )
+	  {
+		updateToolstripEntry(0);
+	  }
       scheduleRequest();
     },
     function() {
@@ -187,11 +198,13 @@ function toggleLoginState(flag) {
 
 function updateEntries(data) {
   entries = [];
-  if ( data.feed.entry == undefined )
+  if (  data == undefined ||
+		data.feed == undefined ||
+		data.feed.entry == undefined )
   {
-	console.log('GoCalendar: NO data fetched.');
+	go_log('GoCalendar: NO data fetched.');
     sadFace();
-	return;
+	return false;
   }
   
   var calData = toArray(data.feed.entry); 
@@ -214,7 +227,7 @@ function updateEntries(data) {
 	if ( isRecurrencyEvent(calEntry) )
 	{
 		var when = toArray(calEntry['gd:when']);
-		console.log("Recurrency Event: " + calEntry);
+		go_log("Recurrency Event: " + calEntry);
 		for ( var j = 0, rlen = when.length; j < rlen; ++j )
 		{
 			startTime = when[j].startTime;
@@ -241,10 +254,10 @@ function updateEntries(data) {
 			where,
 			calEntry.id,
 			0);		
-	}
-	
+	}	
   }
-  console.log(entries.length + " entries found.");
+  go_log(entries.length + " entries found.");  
+  return entries != undefined && entries.length > 0;
 }
 
 function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
@@ -274,7 +287,7 @@ function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
 	
 	var idx = entries.length;
     entries[idx] = entry;
-    console.log("idx: " + idx + "entry: " + entry);
+    go_log("idx: " + idx + "entry: " + entry);
 }
 
 function updateToolstripEntry(idx) {
@@ -383,28 +396,40 @@ function getNextEntry(onSuccess, onError) {
         onError();
     }, requestTimeout);  
 
+	go_log("Started abort-by-timeout timer: " + abortTimerId);
+	
     function handleSuccess(data) {        
+		go_log("Request success.");	
         window.clearTimeout(abortTimerId);
-        onSuccess(data);
-        
+        onSuccess(data);        
         data = undefined;
     }    
     
     function handleError() {
+		go_log("Request failed.");	
         window.clearTimeout(abortTimerId);
         onError();
     }    
     
     try {
-        console.log("request..");
+        go_log("request..");
         var xml = new JKL.ParseXML(calendarFullView);
         xml.async( handleSuccess );
         xml.parse();
     } catch(e) {
-        console.log("ex: " + e);
+        go_log("ex: " + e);
         console.error("exception: " + e);
         handleError();
     }    
+}
+
+function go_log(message)
+{
+	var now = new Date();
+	var date_str = now.getHours() + ":" + now.getMinutes() + ":" + now.getSeconds() + "." + now.getMilliseconds();
+	var log_str = date_str + " " + message; 
+	
+	console.log(log_str);
 }
 
 </script>
