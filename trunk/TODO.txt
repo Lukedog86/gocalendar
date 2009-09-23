@@ -1,0 +1,1 @@
+Muovere il codice di fetch dei dati nella background page per limitare l'utilizzo di risorse.
