@@ -1,0 +1,326 @@
+<html>
+<head>
+<script type="text/javascript" src="jkl-parsexml.js"></script>
+<script type="text/javascript" src="dataFormat.js"></script>
+<script type="text/javascript" src="utility.js"></script>
+<script type="text/javascript"> 
+// timeout on the http(s) request
+var requestTimeout = 1000 * 5;  // 5 seconds
+
+// timer id for the polling
+var polling;
+
+// entries array
+var entries = [];
+
+// logon status on google
+var loggedIn = false;
+
+// default time zone
+var defaultTZ = 'T00:00:00.000-04:00'; // midnight Eastern Daylight Time
+
+// dateformat for an all day event
+var allDayEventDateFormat = 'YYYY-MM-DD';
+
+// *** user settings ***
+// data fetch interval
+var pollInterval = 1000 * 30;  // 30 seconds
+
+// data fetch url
+var yourPrivateCalendar = "https://www.google.com/calendar/feeds/default/private/full?futureevents=true&orderby=starttime&sortorder=ascending";
+var calendarFullView = yourPrivateCalendar;
+
+// communication port with the option form
+var optPort;
+
+// initialize the background task
+function init() 
+{    
+  // retrieving culture information ( useful to format datetime)
+  cultureInfo = window.clientInformation.language;
+  go_log("Culture is: " + cultureInfo);  
+
+  // setup communication with OptionPage
+  chrome.extension.onConnect.addListener( function(port)
+    {
+        go_log("Connection request from: " + port.name);
+        if ( port.name == "OptionPage" )
+        {
+            optPort = port;
+            optPort.onMessage.addListener(onMessageFromOptionPage);            
+        }
+    });
+    
+    // fetch Options from localStorage
+    fetchOptions();
+    
+    // start a request immediately
+    window.setTimeout(startRequest, 0);
+}
+
+// helper to launch a new request in the provided interval 
+function scheduleRequest() {
+    if ( polling )
+    {
+        window.clearTimeout(polling);
+        polling = null;
+    }
+  
+    polling = window.setTimeout(startRequest, pollInterval);
+}
+
+// helper to fetch all needed options from localStorage
+function fetchOptions()
+{
+    pollInterval = parseInt(fetchOption('fetchInterv', 30)) * 1000;
+    var iWantMyCalendar = fetchOption('privateCalSel', true) == 'true' ? true : false; 
+        
+    if ( iWantMyCalendar )
+    {
+        calendarFullView = yourPrivateCalendar;
+    }
+    else
+    {
+        var publicCalId = fetchOption('publicCalText', "ht3jlfaac5lfd6263ulfh4tql8@group.calendar.google.com");
+        calendarFullView = "https://www.google.com/calendar/feeds/" + publicCalId + "/public/full?futureevents=true&orderby=starttime&sortorder=ascending"          
+    }    
+}
+
+// callback for onMessage event
+function onMessageFromOptionPage(obj)
+{    
+    if (obj.message == "OptionsSaved!")
+    {
+        go_log("settings count: " + obj.values.length);
+        
+        for ( var i = 0; i < obj.values.length; i++ )
+        {
+            if ( localStorage.getItem(obj.values[i].name) != obj.values[i].value )
+            {
+                go_log("update setting: " + obj.values[i].name + " value: " + obj.values[i].value);
+                localStorage.setItem(obj.values[i].name, obj.values[i].value);
+            }
+        }
+        
+        fetchOptions();
+		
+		if ( !polling )
+		{
+			window.clearTimeout(polling);
+            polling = null;
+		}
+			
+        startRequest();
+    }
+    else if (obj.message == "WantOptions!")
+    {        
+        var opts = [];
+        for (var j=0; j<obj.values.length; ++j)
+        {
+            opts[j] = { name: obj.values[j], value: localStorage.getItem(obj.values[j]) };
+        }
+        
+        optPort.postMessage({message: obj.message, values: opts});        
+        
+        opts = [];
+    }    
+}
+
+function startRequest() {  
+  getNextEntry(
+    function(data) {
+      toggleLoginState(true);
+      if ( updateEntries(data) == true )
+	  {
+		updateToolstripEntry(0);
+	  }
+      scheduleRequest();
+    },
+    function() {
+      toggleLoginState(false);
+      scheduleRequest();
+    }
+  );
+}
+
+// helper for the toolstrip to know if there are entries
+function hasEntries()
+{
+    return ( entries != null && entries.length > 0 ) ? true : false;
+}
+
+// helper to know if a date is an all day event date format
+function isAllDayEvent(dateStr) {
+  return dateStr.length == allDayEventDateFormat.length;
+}
+
+// helper to know if an entry is a recurrence
+function isRecurrencyEvent(entry)
+{
+	return entry['gd:recurrence'] != null;
+}
+
+function updateEntries(data) {
+  entries = [];
+  
+  if (  !data ||
+		!data.feed ||
+		!data.feed.entry )
+  {
+	go_log('GoCalendar: NO data fetched.');
+    sadFace();
+	return false;
+  }
+    
+  var adata = toArray(data.feed.entry);
+  
+  for ( var i = 0, len = adata.length; i < len; ++i ) {
+	var startTime = null;
+	var endTime = null;
+	var where = null;
+    
+    if ( adata[i]['gd:where'] != null )
+    {
+        where = adata[i]['gd:where'].valueString;
+    }
+    else
+    {
+        where = 'Anywhere';
+    }
+    
+	if ( isRecurrencyEvent(adata[i]) )
+	{
+		var when = adata[i]['gd:when'];
+        
+		go_log("Recurrency Event: " + adata[i].title['#text']);
+		for ( var j = 0, rlen = when.length; j < rlen; ++j )
+		{
+			startTime = when[j].startTime;
+			endTime = when[j].endTime;
+			
+			addToEntryList(
+				adata[i].title['#text'],
+				startTime,
+				endTime,
+				where,
+				adata[i].id,
+				j);
+		}
+	}
+	else
+	{	
+		startTime = adata[i]['gd:when'].startTime;
+		endTime = adata[i]['gd:when'].endTime;
+		
+		addToEntryList(
+			adata[i].title['#text'],
+			startTime,
+			endTime,
+			where,
+			adata[i].id,
+			0);		
+	}	
+  }  
+   
+  adata = null;
+  
+  go_log(entries.length + " entries found.");  
+  return hasEntries();
+}
+
+function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
+{	
+    var startDate = new Date();
+    var endDate = new Date();
+	
+    // All day events come back in YYYY/MM/DD format. Append a default 
+    // timezone so that the dates can be properly resolved.
+    if (isAllDayEvent(estart))
+      estart += defaultTZ;
+	
+    if (isAllDayEvent(eend))
+      eend += defaultTZ;
+
+    startDate.setISO8601(estart);
+    endDate.setISO8601(eend);
+
+    entries[entries.length] = { 
+        title: etitle,
+        start: startDate,
+        end: endDate,
+        where: ewhere,
+        id: eid,
+		recid : erecur
+    };
+}
+
+/* API */
+function getNextEntry(onSuccess, onError) {   
+
+    var abortTimerId = window.setTimeout(function() {
+        onError();
+    }, requestTimeout);  
+
+	go_log("Started abort-by-timeout timer: " + abortTimerId);
+	
+    function handleSuccess(data) {        
+		go_log("Request success.");	
+        window.clearTimeout(abortTimerId);
+        onSuccess(data);        
+    }    
+    
+    function handleError() {
+		go_log("Request failed.");	
+        window.clearTimeout(abortTimerId);
+        onError();
+    }    
+    
+    try {
+        go_log("request..");
+        var xml = new JKL.ParseXML(calendarFullView);
+        xml.async( handleSuccess );
+        xml.parse();
+    } catch(e) {
+        go_log("ex: " + e);
+        console.error("exception: " + e);
+        handleError();
+    }    
+}
+
+function toggleLoginState(flag)
+{
+  // change internal status
+  loggedIn = flag;
+
+  go_log("Logon status change: " + loggedIn);
+  
+  var toolstrips = chrome.extension.getToolstrips();
+  for (var i in toolstrips) {
+    if (toolstrips[i].toggleLoginState)
+      toolstrips[i].toggleLoginState(flag);
+  }    
+}
+
+function updateToolstripEntry(idx)
+{
+  var toolstrips = chrome.extension.getToolstrips();
+  for (var i in toolstrips) {
+    if (toolstrips[i].updateToolstripEntry)
+      toolstrips[i].updateToolstripEntry(idx);
+  }   
+}
+
+function sadFace()
+{
+  var toolstrips = chrome.extension.getToolstrips();
+  for (var i in toolstrips) {
+    if (toolstrips[i].sadFace)
+      toolstrips[i].sadFace();
+  } 
+}
+
+</script>
+</head>
+<body onload="init()">
+</body>
+</html>
