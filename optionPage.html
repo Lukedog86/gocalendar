@@ -7,8 +7,6 @@
     <script type="text/javascript">
         // This could easily be written without
         // jQuery if you are not using it.
-
-        var opts = [];
         
         $(document).ready(function() {
             var tabLinks = $(".tabs li a");
@@ -37,18 +35,17 @@
         function loadData()
         {
             console.log("initialize");
-            opts = document.getElementsByTagName('input');
+            var opts = document.getElementsByTagName('input');
             var port = chrome.extension.connect( {name: "OptionPage"} );
             port.onMessage.addListener( function(obj) 
             {
-                //console.log(obj);
                 var settings = obj.values;
                 for( var i = 0; i < settings.length; ++i )
                 {
                     var el_id = settings[i].name;
                     var el = document.getElementById(el_id);
                     var val = settings[i].value;
-                    console.log(el.id + " - " + val);
+
                     if ( el != undefined )
                     {
                         if ( el.type == 'checkbox' )
@@ -64,10 +61,19 @@
                             el.value = val;
                         }
                     }
+                    
+                    el_id = null;
+                    el = null;
+                    val = null;
                 }
                 
                 checkPublicCal();
                 port.disconnect();  
+                
+                port = null;
+                settings = null;
+                obj.values = null;
+                obj = null;
             });
             
             var ids = [];
@@ -77,16 +83,19 @@
             }
             
             port.postMessage({message: "WantOptions!", values: ids});
+            
+            ids = null;
+            opts = null;
         }        
         
         function saveData()
         {
             var port = chrome.extension.connect( {name: "OptionPage"} );            
             var settings = [];
+            var opts = document.getElementsByTagName('input');
             
             for ( var i = 0; i < opts.length; ++i )
             {
-                console.log(opts[i].type + ", " + opts[i].name + ", " + opts[i].value);
                 if ( opts[i].type == 'checkbox' )
                 {
                     settings[settings.length] = { name: opts[i].id, value: opts[i].checked ? true : false } ;
@@ -100,16 +109,19 @@
                     settings[settings.length] = { name: opts[i].id, value: opts[i].value } ;
                 }
             }
-            console.dir(settings);
             port.postMessage({message: "OptionsSaved!", values: settings});
             port.disconnect();  
+            
+            settings = null;
+            opts = null;
         }
         
         function onClose()
         {
             saveData();
             window.close();
-        }
+        }              
+        
     </script>
 </head>
 <body onload="loadData();">
@@ -132,7 +144,7 @@
                 <label class="block field">
                     <input onchange="setPublicCal(false);" type="radio" name="wantToView" id="publicCalSel"/>
                     A Public Calendar:
-                    <input disabled="disabled" type="text" name="publicCalText" id="publicCalText" width="100" value="Type here..." />                  
+                    <input style="width: 150px; margin: 7px;" disabled="disabled" type="text" name="publicCalText" id="publicCalText" width="100" value="Type here..." />                  
                 </label>                
             </div>
             
@@ -148,14 +160,21 @@
             <div class="fleft">
                 <label class="block field">
                     Fetch interval (seconds):
-                    <input width="100" name="fetchInterv" id="fetchInterv" type="text" value="30" />
-                </label>                
+                    <input style="width: 150px; align: right;" name="fetchInterv" id="fetchInterv" type="text" value="30" />                
+                </label>                                               
             </div>
             
+            <div class="fright">
+                    <label class="red block field">Warning. Low ( < 5 ) values can impact performance.</label>
+            </div>
+            <br/>
+                      
             <div class="clear"></div>
+            
+            <button class="fright" onclick="saveData();">Fetch Now</button>
             <hr />
         </div>
-        
+    </div>    
     <button class="fright" onclick="onClose();">Close</button>
 </body>
 </html>

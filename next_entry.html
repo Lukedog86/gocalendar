@@ -3,184 +3,32 @@
 <link rel="stylesheet" type="text/css" href="styles.css">
 <script type="text/javascript" src="jkl-parsexml.js"></script>
 <script type="text/javascript" src="dataFormat.js"></script>
+<script type="text/javascript" src="utility.js"></script>
 <script>
 
 // url for the visual page of google calendar ( your calendar )
 var calendar = "http://www.google.com/calendar/render";
 
-// timeout on the http(s) request
-var requestTimeout = 1000 * 5;  // 5 seconds
-
-// milliseconds in a day
-var oneDayInMilli = 1000 * 24 * 60 * 60; // 1 day
-
-// timer id for the polling
-var polling = undefined;
-
-// default time zone
-var defaultTZ = 'T00:00:00.000-04:00'; // midnight Eastern Daylight Time
-
-// dateformat for an all day event
-var allDayEventDateFormat = 'YYYY-MM-DD';
+// global javascript object for background page
+var worker = undefined;
 
 // current visible appointment / index
+var currentEntryIdx = 0;
 var currentEntry;
-var currentEntryIdx;
 
-// entries array
-var entries = [];
-
-// logon status on google
-var loggedIn = false;
-
-// communication port with the option form
-var optPort = undefined;
-
-// *** user settings ***
-// data fetch interval
-var pollInterval = 1000 * 30;  // 30 seconds
-// data fetch url
-var yourPrivateCalendar = "https://www.google.com/calendar/feeds/default/private/full?futureevents=true&orderby=starttime&sortorder=ascending";
-var calendarFullView = yourPrivateCalendar;
-
-// initialize the toolstrip
-function init() 
-{    
-  // retrieving culture information ( useful to format datetime)
-  cultureInfo = window.clientInformation.language;
-  go_log("Culture is: " + cultureInfo);  
-
-  // setup communication with OptionPage
-  chrome.extension.onConnect.addListener( function(port)
-    {
-        if ( port.name == "OptionPage" )
-        {
-            optPort = port;
-            optPort.onMessage.addListener(onMessageFromOptionPage);
-        }
-    });
-    
-    // fetch Options from localStorage
-    fetchOptions();
-    
-    // start a request immediately
-    window.setTimeout(startRequest, 0);
-}
-
-// utility to get element by Id
-function $(elem) {
-  return document.getElementById(elem);
-}
-
-// utility to get array type 
-function toArray(obj) {
-  if ( obj.constructor == Array )
-    return obj;
-  return [obj];
-}
-
-// helper to know if a date is an all day event date format
-function isAllDayEvent(dateStr) {
-  return dateStr.length == allDayEventDateFormat.length;
-}
-
-// helper to know if an entry is a recurrence
-function isRecurrencyEvent(entry)
+// initialize toolstrip and communication with backgroundPage
+function init()
 {
-	return entry['gd:recurrence'] != undefined;
-}
-
-// helper to launch a new request in the provided interval 
-function scheduleRequest() {
-  if ( polling != undefined )
-  {
-	window.clearTimeout(polling);  
-  }
-  
-  polling = window.setTimeout(startRequest, pollInterval);
-}
-
-// helper to fetch a named option from localStorage
-function fetchOption(name, defaultvalue)
-{
-    var value = localStorage.getItem(name);
-    if ( value == undefined )
+    worker = chrome.extension.getBackgroundPage();
+    if ( worker.loggedIn && worker.hasEntries() )
     {
-        return defaultvalue;
-    }
-    
-    return value;
-}
-
-// helper to fetch all needed options from localStorage
-function fetchOptions()
-{
-    pollInterval = parseInt(fetchOption('fetchInterv', 30)) * 1000;
-    var iWantMyCalendar = fetchOption('privateCalSel', true) == 'true' ? true : false; 
-        
-    if ( iWantMyCalendar )
-    {
-        calendarFullView = yourPrivateCalendar;
+        toggleLoginState(true);
+        updateToolstripEntry(0);
     }
     else
     {
-        var publicCalId = fetchOption('publicCalText', "ht3jlfaac5lfd6263ulfh4tql8@group.calendar.google.com");
-        calendarFullView = "https://www.google.com/calendar/feeds/" + publicCalId + "/public/full?futureevents=true&orderby=starttime&sortorder=ascending"          
-    }    
-}
-
-// callback for onMessage event
-function onMessageFromOptionPage(obj)
-{    
-    if (obj.message == "OptionsSaved!")
-    {
-        go_log("settings count: " + obj.values.length);
-        for ( var i = 0; i < obj.values.length; i++ )
-        {
-            localStorage.setItem(obj.values[i].name, obj.values[i].value);
-        }
-        
-        fetchOptions();
-		
-		if ( polling != undefined )
-		{
-			window.clearTimeout(polling);
-		}
-			
-        startRequest();
+        toggleLoginState(false);
     }
-    else if (obj.message == "WantOptions!")
-    {        
-        var ids = toArray(obj.values);
-        var optSettings = [];
-        for (var j=0; j<ids.length; ++j)
-        {
-            optSettings[j] = { name: ids[j], value: localStorage.getItem(ids[j]) };
-        }
-        
-        optPort.postMessage({message: obj.message, values: optSettings});
-        
-        // clear
-        optSettings = [];
-    }
-}
-
-// ajax stuff
-function startRequest() {  
-  getNextEntry(
-    function(data) {
-      toggleLoginState(true);
-      if ( updateEntries(data) == true )
-	  {
-		updateToolstripEntry(0);
-	  }
-      scheduleRequest();
-    },
-    function() {
-      toggleLoginState(false);
-      scheduleRequest();
-    }
-  );
 }
 
 // ui stuff
@@ -188,144 +36,44 @@ function toggleLoginState(flag) {
   if ( flag ) {
     $("notLoggedIn").style.display = "none";
     $("loggedIn").style.display = "";
-    loggedIn = true;
+    
   } else {
     $("loggedIn").style.display = "none";
-    $("notLoggedIn").style.display = ""; 
-    loggedIn = false;
+    $("notLoggedIn").style.display = "";     
   }
-}
-
-function updateEntries(data) {
-  entries = [];
-  if (  data == undefined ||
-		data.feed == undefined ||
-		data.feed.entry == undefined )
-  {
-	go_log('GoCalendar: NO data fetched.');
-    sadFace();
-	return false;
-  }
-  
-  var calData = toArray(data.feed.entry); 
- 
-  for ( var i = 0, len = calData.length; i < len; ++i ) {
-	var startTime = undefined;
-	var endTime = undefined;
-    var calEntry = calData[i];
-	var where = undefined;
-    
-    if ( calEntry['gd:where'] != undefined )
-    {
-        where = calEntry['gd:where'].valueString;
-    }
-    else
-    {
-        where = 'Anywhere';
-    }
-    
-	if ( isRecurrencyEvent(calEntry) )
-	{
-		var when = toArray(calEntry['gd:when']);
-		go_log("Recurrency Event: " + calEntry);
-		for ( var j = 0, rlen = when.length; j < rlen; ++j )
-		{
-			startTime = when[j].startTime;
-			endTime = when[j].endTime;
-			
-			addToEntryList(
-				calEntry.title['#text'],
-				startTime,
-				endTime,
-				where,
-				calEntry.id,
-				j);
-		}
-	}
-	else
-	{	
-		startTime = calEntry['gd:when'].startTime;
-		endTime = calEntry['gd:when'].endTime;
-		
-		addToEntryList(
-			calEntry.title['#text'],
-			startTime,
-			endTime,
-			where,
-			calEntry.id,
-			0);		
-	}	
-  }
-  go_log(entries.length + " entries found.");  
-  return entries != undefined && entries.length > 0;
-}
-
-function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
-{	
-    var startDate = new Date();
-    var endDate = new Date();
-	
-    // All day events come back in YYYY/MM/DD format. Append a default 
-    // timezone so that the dates can be properly resolved.
-    if (isAllDayEvent(estart))
-      estart += defaultTZ;
-	
-    if (isAllDayEvent(eend))
-      eend += defaultTZ;
-
-    startDate.setISO8601(estart);
-    endDate.setISO8601(eend);
-
-    var entry = { 
-        title: etitle,
-        start: startDate,
-        end: endDate,
-        where: ewhere,
-        id: eid,
-		recid : erecur
-    }
-	
-	var idx = entries.length;
-    entries[idx] = entry;
-    go_log("idx: " + idx + "entry: " + entry);
 }
 
 function updateToolstripEntry(idx) {
-  if ( idx >= 0 && idx < entries.length ) // check IDX
+  if ( idx >= 0 && idx < worker.entries.length ) // check IDX
   {
-	  if (currentEntry == undefined || currentEntry.id != entries[idx].id || currentEntry.recid != entries[idx].recid) {
-		currentEntry = entries[idx];
-		currentEntryIdx = idx;
+	if (  !currentEntry || 
+           currentEntry.id != worker.entries[idx].id || 
+           currentEntry.recid != worker.entries[idx].recid) 
+    {
+        currentEntryIdx = idx;
+		currentEntry = worker.entries[currentEntryIdx];		
 		startFlip();
-	  }
+    }
   }
 }
 
 function goToCalendar() {
-    if ( loggedIn == true )
+    if ( worker.loggedIn == true )
     {
         chrome.tabs.create({url: calendar});
     }
     else
     {
-    /*
-        window.open("loginPage.html","_blank",
-                "directories=no,height=210,width=400,left=10,top=10,location=no,"+
-                "menubar=no,scrollbars=no,status=no,titlebar=no,toolbar=no");
-                */
-        var page = chrome.extension.getURL("loginPage.html");
-        chrome.toolstrip.expand({url: page, height: 250});
+        chrome.toolstrip.expand({url: chrome.extension.getURL("loginPage.html"), height: 250});
     }
 }
 
 function openOptions()
 {
-        var page = chrome.extension.getURL("optionPage.html");
-        window.open(page,"_blank",
-                "directories=no,height=575,width=500,left=300,top=200,location=no,"+
+        window.open(chrome.extension.getURL("optionPage.html"),"_blank",
+                "directories=no,height=595,width=500,left=300,top=200,location=no,"+
                 "menubar=no,scrollbars=no,status=no,titlebar=no,toolbar=no");  
 }
-
 
 // animation
 function startFlip() {
@@ -334,10 +82,9 @@ function startFlip() {
 }
 
 function midFlip() {
-  var nextEntryText = currentEntry.title + " @ " + 
-    shortDateString(currentEntry.start, currentEntry.end)
   $("nextEntry").className = 'post-flip';  
-  $("nextEntry").innerHTML = nextEntryText;
+  $("nextEntry").innerHTML = currentEntry.title + " @ " + 
+    shortDateString(worker.cultureInfo, currentEntry.start, currentEntry.end);
   setTimeout(endFlip, 500);
 }
 
@@ -350,86 +97,23 @@ function sadFace()
 	$("nextEntry").innerHTML = ":("; 
 }
 
-function shortDateString(start, end) {
-  var format;
-  switch ( cultureInfo ) {
-    case 'en-US':
-      format = 'm/d/yy h:MM TT';
-      break;
-    default:
-      format = 'dd/mm/yy HH:MM';
-  }
-  // If the event is an all day event, don't show the time.
-  if ( (end - start) == oneDayInMilli )
-    format = format.substring(0, format.indexOf(' '));
-  return start.format(format);
-}
-
 function showNextEntry() {
-  if ( !loggedIn ) return;
-  var nextIdx = ( currentEntryIdx + 1 ) % entries.length;
-  updateToolstripEntry(nextIdx);
+  if ( !worker.loggedIn ) return;
+  updateToolstripEntry(( currentEntryIdx + 1 ) % worker.entries.length);
 }
 
-function showPrevEntry() {
-  if ( !loggedIn ) return;
-  var prevIdx = ( currentEntryIdx - 1 ) % entries.length;
-  updateToolstripEntry(prevIdx);
+function showPrevEntry() 
+{
+  if ( !worker.loggedIn ) return;
+  updateToolstripEntry(( currentEntryIdx - 1 ) % worker.entries.length);
 }
 
 function btnOver() {
-    var c = currentEntry;
-	if ( c != undefined )
+	if ( currentEntry )
 	{
-		$("currententry").title = c.title + "\nStart: " + c.start +
-			"\nEnd: " + c.end + "\nWhere: " + c.where;
+		$("nextEntry").title = currentEntry.title + "\nStart: " + currentEntry.start +
+			"\nEnd: " + currentEntry.end + "\nWhere: " + currentEntry.where;
 	}
-}
-
-/* API */
-
-function getNextEntry(onSuccess, onError) {
-    var xhr = new XMLHttpRequest();
-    
-    var abortTimerId = window.setTimeout(function() {
-        xhr.abort();
-        onError();
-    }, requestTimeout);  
-
-	go_log("Started abort-by-timeout timer: " + abortTimerId);
-	
-    function handleSuccess(data) {        
-		go_log("Request success.");	
-        window.clearTimeout(abortTimerId);
-        onSuccess(data);        
-        data = undefined;
-    }    
-    
-    function handleError() {
-		go_log("Request failed.");	
-        window.clearTimeout(abortTimerId);
-        onError();
-    }    
-    
-    try {
-        go_log("request..");
-        var xml = new JKL.ParseXML(calendarFullView);
-        xml.async( handleSuccess );
-        xml.parse();
-    } catch(e) {
-        go_log("ex: " + e);
-        console.error("exception: " + e);
-        handleError();
-    }    
-}
-
-function go_log(message)
-{
-	var now = new Date();
-	var date_str = now.getHours() + ":" + now.getMinutes() + ":" + now.getSeconds() + "." + now.getMilliseconds();
-	var log_str = date_str + " " + message; 
-	
-	console.log(log_str);
 }
 
 </script>
@@ -440,7 +124,7 @@ function go_log(message)
       <span id="prevtext">&lt;</span>
     </div>    
     
-    <div id="currententry" class="toolstrip-button" onclick="openOptions()">
+    <div id="optionEntry" class="toolstrip-button" onclick="openOptions()">
         <img src="icons/wrench-16.png" style="width:auto; height:auto">    
     </div>
     
