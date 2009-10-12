@@ -198,7 +198,7 @@ function updateEntries(data) {
 			startTime = when[j].startTime;
 			endTime = when[j].endTime;
 			
-			addToEntryList(
+			insertInOrderIntoToEntryList(
 				adata[i].title['#text'],
 				startTime,
 				endTime,
@@ -212,7 +212,7 @@ function updateEntries(data) {
 		startTime = adata[i]['gd:when'].startTime;
 		endTime = adata[i]['gd:when'].endTime;
 		
-		addToEntryList(
+		appendToEntryList(
 			adata[i].title['#text'],
 			startTime,
 			endTime,
@@ -228,7 +228,22 @@ function updateEntries(data) {
   return hasEntries();
 }
 
-function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
+function insertInOrderIntoToEntryList(etitle, estart, eend, ewhere, eid, erecur)
+{
+    var i = 0;
+    
+    while(i < entries.length && entries[i].key <= estart)
+        i++;
+    
+    addToEntryList(i, etitle, estart, eend, ewhere, eid, erecur);
+}
+
+function appendToEntryList(etitle, estart, eend, ewhere, eid, erecur)
+{
+    addToEntryList(entries.length, etitle, estart, eend, ewhere, eid, erecur);
+}
+
+function addToEntryList(eindex, etitle, estart, eend, ewhere, eid, erecur)
 {	
     var startDate = new Date();
     var endDate = new Date();
@@ -244,14 +259,24 @@ function addToEntryList(etitle, estart, eend, ewhere, eid, erecur)
     startDate.setISO8601(estart);
     endDate.setISO8601(eend);
 
-    entries[entries.length] = { 
-        title: etitle,
-        start: startDate,
-        end: endDate,
-        where: ewhere,
-        id: eid,
-		recid : erecur
-    };
+    var event = { 
+            key: estart,
+            title: etitle,
+            start: startDate,
+            end: endDate,
+            where: ewhere,
+            id: eid,
+            recid : erecur
+        };
+        
+    if ( eindex == entries.length )
+    {
+        entries[eindex] = event;
+    }
+    else
+    {
+        entries.splice(eindex,0,event);
+    }
 }
 
 /* API */
