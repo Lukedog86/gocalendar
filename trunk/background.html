@@ -209,10 +209,11 @@ function updateEntries(data) {
 	}
 	else
 	{	
+        go_log("Scheduled Event: " + adata[i].title['#text']);
 		startTime = adata[i]['gd:when'].startTime;
 		endTime = adata[i]['gd:when'].endTime;
 		
-		appendToEntryList(
+		insertInOrderIntoToEntryList(
 			adata[i].title['#text'],
 			startTime,
 			endTime,
